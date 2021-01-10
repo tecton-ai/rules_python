@@ -110,9 +110,9 @@ python_interpreter.
             allow_single_file = True,
             cfg = "host",
         ),
-        "_distribution": attr.label(
+        "_lib_bazel": attr.label(
             executable = False,
-            default = Label("@rules_python//python/pip_install/extract_wheels:distribution"),
+            default = Label("//python/pip_install/extract_wheels/lib:bazel.py"),
         )
     },
     implementation = _pip_repository_impl,

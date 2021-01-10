@@ -78,12 +78,12 @@ def generate_requirements_file_contents(repo_name: str, targets: Iterable[str]) 
         """\
         all_requirements = [{requirement_labels}]
 
-        def requirement(name):
+        def requirement__(name):
            name_key = name.replace("-", "_").replace(".", "_").lower()
            return "{repo}//pypi__" + name_key
 
         def whl_requirement(name):
-            return requirement(name) + ":whl"
+            return requirement__(name) + ":whl"
         """.format(
             repo=repo_name, requirement_labels=",".join(sorted(targets))
         )
