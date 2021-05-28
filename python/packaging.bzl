@@ -34,31 +34,45 @@ def _input_file_to_arg(input_file):
     """Converts a File object to string for --input_file argument to wheelmaker"""
     return "%s;%s" % (_path_inside_wheel(input_file), input_file.path)
 
-def _py_package_impl(ctx):
-    inputs = depset(
-        transitive = [dep[DefaultInfo].data_runfiles.files for dep in ctx.attr.deps] +
-                     [dep[DefaultInfo].default_runfiles.files for dep in ctx.attr.deps],
-    )
+def _import_depset_to_prefixes(imports):
+    prefixes = []
+    for imp in imports.to_list():
+        if imp.startswith("__main__/"):
+            prefixes.append(imp[len("__main__/"):] + "/")
+    return prefixes
 
+def _py_package_impl(ctx):
     # TODO: '/' is wrong on windows, but the path separator is not available in starlark.
     # Fix this once ctx.configuration has directory separator information.
     packages = [p.replace(".", "/") for p in ctx.attr.packages]
     if not packages:
-        filtered_inputs = inputs
+        filtered_inputs = depset(
+        transitive = [dep[DefaultInfo].data_runfiles.files for dep in ctx.attr.deps] +
+                     [dep[DefaultInfo].default_runfiles.files for dep in ctx.attr.deps],
+        )
     else:
         filtered_files = []
-
         # TODO: flattening depset to list gives poor performance,
-        for input_file in inputs.to_list():
-            wheel_path = _path_inside_wheel(input_file)
-            for package in packages:
-                if wheel_path.startswith(package):
-                    filtered_files.append(input_file)
+        for dep in ctx.attr.deps:
+            import_prefixes = _import_depset_to_prefixes(dep[PyInfo].imports)
+            inputs = depset(transitive=[dep[DefaultInfo].data_runfiles.files, dep[DefaultInfo].default_runfiles.files])
+            for input_file in inputs.to_list():
+                wheel_path = _path_inside_wheel(input_file)
+                for import_path in import_prefixes:
+                    if wheel_path.startswith(import_path):
+                        wheel_path = wheel_path[len(import_path):]
+                        break
+                for package in packages:
+                    if wheel_path.startswith(package):
+                        filtered_files.append(input_file)
         filtered_inputs = depset(direct = filtered_files)
 
-    return [DefaultInfo(
-        files = filtered_inputs,
-    )]
+    imports = depset(transitive = [dep[PyInfo].imports for dep in ctx.attr.deps])
+
+    return [
+        DefaultInfo(files = filtered_inputs),
+        PyInfo(imports = imports, transitive_sources = filtered_inputs),
+    ]
 
 py_package = rule(
     implementation = _py_package_impl,
@@ -106,6 +120,11 @@ def _py_wheel_impl(ctx):
     ctx.actions.write(output = packageinputfile, content = content)
     other_inputs.append(packageinputfile)
 
+    strip_path_prefixes = []
+    strip_path_prefixes.extend(ctx.attr.strip_path_prefixes)
+    import_depset = depset(transitive=[dep[PyInfo].imports for dep in ctx.attr.deps])
+    strip_path_prefixes.extend(_import_depset_to_prefixes(import_depset))
+
     args = ctx.actions.args()
     args.add("--name", ctx.attr.distribution)
     args.add("--version", ctx.attr.version)
@@ -114,7 +133,7 @@ def _py_wheel_impl(ctx):
     args.add("--abi", ctx.attr.abi)
     args.add("--platform", ctx.attr.platform)
     args.add("--out", outfile.path)
-    args.add_all(ctx.attr.strip_path_prefixes, format_each = "--strip_path_prefix=%s")
+    args.add_all(strip_path_prefixes, format_each = "--strip_path_prefix=%s")
 
     args.add("--input_file_list", packageinputfile)
 
@@ -123,10 +142,14 @@ def _py_wheel_impl(ctx):
         extra_headers.append("Author: %s" % ctx.attr.author)
     if ctx.attr.author_email:
         extra_headers.append("Author-email: %s" % ctx.attr.author_email)
+    if ctx.attr.description_content_type:
+        extra_headers.append("Description-Content-Type: %s" % ctx.attr.description_content_type)
     if ctx.attr.homepage:
         extra_headers.append("Home-page: %s" % ctx.attr.homepage)
     if ctx.attr.license:
         extra_headers.append("License: %s" % ctx.attr.license)
+    if ctx.attr.summary:
+        extra_headers.append("Summary: %s" % ctx.attr.summary)
 
     for h in extra_headers:
         args.add("--header", h)
@@ -155,13 +178,11 @@ def _py_wheel_impl(ctx):
     if entrypoints:
         lines = []
         for group, entries in sorted(entrypoints.items()):
-            if lines:
-                # Blank line between groups
-                lines.append("")
             lines.append("[{group}]".format(group = group))
             lines += sorted(entries)
+            lines.append("")
         entry_points_file = ctx.actions.declare_file(ctx.attr.name + "_entry_points.txt")
-        content = "\n".join(lines)
+        content = "\n".join(lines) + "\n"
         ctx.actions.write(output = entry_points_file, content = content)
         other_inputs.append(entry_points_file)
         args.add("--entry_points_file", entry_points_file)
@@ -260,9 +281,11 @@ _other_attrs = {
     "author_email": attr.string(default = ""),
     "classifiers": attr.string_list(),
     "description_file": attr.label(allow_single_file = True),
+    "description_content_type": attr.string(default = ""),
     "homepage": attr.string(default = ""),
     "license": attr.string(default = ""),
     "python_requires": attr.string(default = ""),
+    "summary": attr.string(default = ""),
     "strip_path_prefixes": attr.string_list(
         default = [],
         doc = "path prefixes to strip from files added to the generated package",
