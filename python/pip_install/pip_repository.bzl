@@ -32,10 +32,13 @@ def _parse_optional_attrs(rctx, args):
         args: A list of parsed args for the rule.
     Returns: Augmented args list.
     """
-    if rctx.attr.extra_pip_args:
+    extra_args = list(rctx.attr.extra_pip_args)
+    for target in rctx.attr.extra_index_url_targets:
+        extra_args += ["--extra-index-url", "file://" + str(rctx.path(target)).split("/index.html")[0]]
+    if extra_args:
         args += [
             "--extra_pip_args",
-            struct(args = rctx.attr.extra_pip_args).to_json(),
+            struct(args = extra_args).to_json(),
         ]
 
     if rctx.attr.pip_data_exclude:
@@ -151,6 +154,10 @@ python_interpreter.
         default = 600,
         doc = "Timeout (in seconds) on the rule's execution duration.",
     ),
+    "extra_index_url_targets": attr.label_list(
+        default = [],
+        doc = "Bazel labels for directories which should be passed to pip's --extra-index-url flag",
+    )
 }
 
 pip_repository_attrs = {
