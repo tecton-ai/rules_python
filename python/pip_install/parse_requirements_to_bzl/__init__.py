@@ -87,7 +87,7 @@ def generate_parsed_requirements_contents(all_args: argparse.Namespace) -> str:
     """
 
     args = dict(vars(all_args))
-    args = deserialize_structured_args(args)
+    args = arguments.deserialize_structured_args(args)
     args.setdefault("python_interpreter", sys.executable)
     # Pop these off because they won't be used as a config argument to the whl_library rule.
     requirements_lock = args.pop("requirements_lock")
