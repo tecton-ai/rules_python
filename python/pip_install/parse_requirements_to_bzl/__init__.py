@@ -63,20 +63,6 @@ def repo_names_and_requirements(
     return NamesAndRequirements(whls, aliases)
 
 
-def deserialize_structured_args(args):
-    """Deserialize structured arguments passed from the starlark rules.
-        Args:
-            args: dict of parsed command line arguments
-    """
-    structured_args = ("extra_pip_args", "pip_data_exclude", "pip_platform_definitions")
-    for arg_name in structured_args:
-        if args.get(arg_name) is not None:
-            args[arg_name] = json.loads(args[arg_name])["args"]
-        else:
-            args[arg_name] = []
-    return args
-
-
 def generate_parsed_requirements_contents(all_args: argparse.Namespace) -> str:
     """
     Parse each requirement from the requirements_lock file, and prepare arguments for each
