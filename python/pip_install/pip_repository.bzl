@@ -103,7 +103,7 @@ def _pip_repository_impl(rctx):
         if rctx.attr.pip_platform_definitions:
             args.extend([
                 "--pip_platform_definitions",
-                struct(args = {str(k): v for k, v in rctx.attr.pip_platform_definitions.items()}).to_json(),
+                struct(arg = {str(k): v for k, v in rctx.attr.pip_platform_definitions.items()}).to_json(),
             ])
     else:
         args = [
