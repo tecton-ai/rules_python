@@ -157,10 +157,13 @@ def _parse_optional_attrs(rctx, args):
 
     # Check for None so we use empty default types from our attrs.
     # Some args want to be list, and some want to be dict.
-    if rctx.attr.extra_pip_args != None:
+    extra_args = list(rctx.attr.extra_pip_args)
+    for target in rctx.attr.extra_index_url_targets:
+        extra_args += ["--extra-index-url", "file://" + str(rctx.path(target)).split("/index.html")[0]]
+    if extra_args:
         args += [
             "--extra_pip_args",
-            struct(arg = rctx.attr.extra_pip_args).to_json(),
+            struct(arg = extra_args).to_json(),
         ]
 
     if rctx.attr.download_only:
@@ -367,6 +370,10 @@ Prefix for the generated packages will be of the form
         allow_files = True,
         default = PIP_INSTALL_PY_SRCS,
     ),
+    "extra_index_url_targets": attr.label_list(
+        default = [],
+        doc = "Bazel labels for directories which should be passed to pip's --extra-index-url flag",
+    )
 }
 
 pip_repository_attrs = {
