@@ -1,6 +1,14 @@
-load("@pip//:requirements.bzl", "requirement")
+load("@bazel_skylib//rules:diff_test.bzl", "diff_test")
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load(
+    "@pip//:requirements.bzl",
+    "data_requirement",
+    "dist_info_requirement",
+    "entry_point",
+    "requirement",
+)
 load("@rules_python//python:defs.bzl", "py_binary", "py_test")
-load("@rules_python//python/pip_install:requirements.bzl", "compile_pip_requirements")
+load("@rules_python//python:pip.bzl", "compile_pip_requirements")
 
 # Toolchain setup, this is optional.
 # Demonstrate that we can use the same python interpreter for the toolchain and executing pip in pip install (see WORKSPACE).
@@ -42,7 +50,61 @@ py_test(
     deps = [":main"],
 )
 
+# For pip dependencies which have entry points, the `entry_point` macro can be
+# used from the generated `pip_install` repository to access a runnable binary.
+
+alias(
+    name = "yamllint",
+    actual = entry_point("yamllint"),
+)
+
 # Check that our compiled requirements are up-to-date
 compile_pip_requirements(
     name = "requirements",
+    extra_args = ["--allow-unsafe"],
+)
+
+# Test the use of all pip_install utilities in a single py_test
+py_test(
+    name = "pip_install_test",
+    srcs = ["pip_install_test.py"],
+    data = [
+        ":yamllint",
+        data_requirement("s3cmd"),
+        dist_info_requirement("boto3"),
+    ],
+    env = {
+        "WHEEL_DATA_CONTENTS": "$(rootpaths {})".format(data_requirement("s3cmd")),
+        "WHEEL_DIST_INFO_CONTENTS": "$(rootpaths {})".format(dist_info_requirement("boto3")),
+        "YAMLLINT_ENTRY_POINT": "$(rootpath :yamllint)",
+    },
+    deps = ["@rules_python//python/runfiles"],
+)
+
+# Assert that tags are present on resulting py_library,
+# which is useful for tooling that needs to reflect on the dep graph
+# to determine the packages it was built from.
+genquery(
+    name = "yamllint_lib_by_version",
+    expression = """
+    attr("tags", "\\bpypi_version=1.26.3\\b", "@pip//pypi__yamllint")
+    intersect
+    attr("tags", "\\bpypi_name=yamllint\\b", "@pip//pypi__yamllint")
+    """,
+    scope = [requirement("yamllint")],
+)
+
+write_file(
+    name = "write_expected",
+    out = "expected",
+    content = [
+        "@pip//pypi__yamllint:pypi__yamllint",
+        "",
+    ],
+)
+
+diff_test(
+    name = "test_query_result",
+    file1 = "expected",
+    file2 = "yamllint_lib_by_version",
 )

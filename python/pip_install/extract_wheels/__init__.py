@@ -8,11 +8,17 @@ Under the hood, it depends on the `pip wheel` command to do resolution, download
 import argparse
 import glob
 import os
+import pathlib
 import subprocess
 import sys
-import json
 
-from python.pip_install.extract_wheels.lib import bazel, requirements, arguments
+from python.pip_install.extract_wheels.lib import (
+    annotation,
+    arguments,
+    bazel,
+    requirements,
+    wheel,
+)
 
 
 def configure_reproducible_wheels() -> None:
@@ -58,34 +64,62 @@ def main() -> None:
         required=True,
         help="Path to requirements.txt from where to install dependencies",
     )
+    parser.add_argument(
+        "--annotations",
+        type=annotation.annotations_map_from_str_path,
+        help="A json encoded file containing annotations for rendered packages.",
+    )
     arguments.parse_common_args(parser)
     args = parser.parse_args()
     deserialized_args = dict(vars(args))
     arguments.deserialize_structured_args(deserialized_args)
 
+    # Pip is run with the working directory changed to the folder containing the requirements.txt file, to allow for
+    # relative requirements to be correctly resolved. The --wheel-dir is therefore required to be repointed back to the
+    # current calling working directory (the repo root in .../external/name), where the wheel files should be written to
     pip_args = (
-        [sys.executable, "-m", "pip", "--isolated", "wheel", "-r", args.requirements] +
-        deserialized_args["extra_pip_args"]
+        [sys.executable, "-m", "pip"]
+        + (["--isolated"] if args.isolated else [])
+        + ["wheel", "-r", args.requirements]
+        + ["--wheel-dir", os.getcwd()]
+        + deserialized_args["extra_pip_args"]
     )
 
     env = os.environ.copy()
     env.update(deserialized_args["environment"])
+
     # Assumes any errors are logged by pip so do nothing. This command will fail if pip fails
-    subprocess.run(pip_args, check=True, env=env)
+    subprocess.run(
+        pip_args,
+        check=True,
+        env=env,
+        cwd=str(pathlib.Path(args.requirements).parent.resolve()),
+    )
 
     extras = requirements.parse_extras(args.requirements)
 
     repo_label = "@%s" % args.repo
 
+    # Locate all wheels
+    wheels = [whl for whl in glob.glob("*.whl")]
+
+    # Collect all annotations
+    reqs = {whl: wheel.Wheel(whl).name for whl in wheels}
+    annotations = args.annotations.collect(reqs.values())
+
     targets = [
-        '"%s%s"'
-        % (
+        '"{}{}"'.format(
             repo_label,
             bazel.extract_wheel(
-                whl, extras, deserialized_args["pip_data_exclude"], args.enable_implicit_namespace_pkgs
+                wheel_file=whl,
+                extras=extras,
+                pip_data_exclude=deserialized_args["pip_data_exclude"],
+                enable_implicit_namespace_pkgs=args.enable_implicit_namespace_pkgs,
+                repo_prefix=args.repo_prefix,
+                annotation=annotations.get(name),
             ),
         )
-        for whl in glob.glob("*.whl")
+        for whl, name in reqs.items()
     ]
 
     with open("requirements.bzl", "w") as requirement_file:

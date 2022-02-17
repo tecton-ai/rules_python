@@ -7,8 +7,10 @@
 /python/ @brandjon @lberki
 # But not everything under python/ is the core Python rules.
 /python/pip.bzl @thundergolfer @andyscott
-/python/whl.bzl @thundergolfer @andyscott
 /python/requirements.txt @thundergolfer @andyscott
+
+# Directory containing the Gazelle extension and Go code.
+/gazelle/ @f0rmiga
 
 # The proposals dir corresponds to the Bazel proposals process, documented
 # here: https://bazel.build/designs/index.html
