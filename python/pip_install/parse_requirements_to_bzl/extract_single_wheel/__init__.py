@@ -1,14 +1,14 @@
-import os
 import argparse
-import sys
+import errno
 import glob
+import os
 import subprocess
-import json
-
+import sys
 from tempfile import NamedTemporaryFile
 
-from python.pip_install.extract_wheels.lib import bazel, requirements, arguments
 from python.pip_install.extract_wheels import configure_reproducible_wheels
+from python.pip_install.extract_wheels.lib import arguments, bazel, requirements
+from python.pip_install.extract_wheels.lib.annotation import annotation_from_str_path
 
 
 def main() -> None:
@@ -22,6 +22,11 @@ def main() -> None:
         help="A single PEP508 requirement specifier string.",
     )
     parser.add_argument(
+        "--annotation",
+        type=annotation_from_str_path,
+        help="A json encoded file containing annotations for rendered packages.",
+    )
+    parser.add_argument(
         "--pip_platform_definition",
         help="A pip platform definition in the form <platform>-<python_version>-<implementation>-<abi>",
     )
@@ -32,7 +37,7 @@ def main() -> None:
 
     configure_reproducible_wheels()
 
-    pip_args = [sys.executable, "-m", "pip", "--isolated"]
+    pip_args = [sys.executable, "-m", "pip"] + (["--isolated"] if args.isolated else [])
     if args.pip_platform_definition:
         platform, python_version, implementation, abi = args.pip_platform_definition.split("-")
         pip_args.extend([
@@ -47,7 +52,7 @@ def main() -> None:
         pip_args.append("wheel")
     pip_args.extend(["--no-deps"] + deserialized_args["extra_pip_args"])
 
-    requirement_file = NamedTemporaryFile(mode='wb', delete=False)
+    requirement_file = NamedTemporaryFile(mode="wb", delete=False)
     try:
         requirement_file.write(args.requirement.encode("utf-8"))
         requirement_file.flush()
@@ -74,10 +79,11 @@ def main() -> None:
 
     whl = next(iter(glob.glob("*.whl")))
     bazel.extract_wheel(
-        whl,
-        extras,
-        deserialized_args["pip_data_exclude"],
-        args.enable_implicit_namespace_pkgs,
+        wheel_file=whl,
+        extras=extras,
+        pip_data_exclude=deserialized_args["pip_data_exclude"],
+        enable_implicit_namespace_pkgs=args.enable_implicit_namespace_pkgs,
         incremental=True,
-        incremental_repo_prefix=bazel.whl_library_repo_prefix(args.repo)
+        repo_prefix=args.repo_prefix,
+        annotation=args.annotation,
     )

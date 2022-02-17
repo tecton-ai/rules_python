@@ -1,4 +1,5 @@
 """Utility class to inspect an extracted wheel directory"""
+import configparser
 import glob
 import os
 import stat
@@ -42,6 +43,47 @@ class Wheel:
     def metadata(self) -> pkginfo.Wheel:
         return pkginfo.get_metadata(self.path)
 
+    def entry_points(self) -> Dict[str, str]:
+        """Returns the entrypoints defined in the current wheel
+
+        See https://packaging.python.org/specifications/entry-points/ for more info
+
+        Returns:
+            Dict[str, str]: A mappying of the entry point's name to it's method
+        """
+        with zipfile.ZipFile(self.path, "r") as whl:
+            # Calculate the location of the entry_points.txt file
+            metadata = self.metadata
+            name = "{}-{}".format(metadata.name.replace("-", "_"), metadata.version)
+
+            # Note that the zipfile module always uses the forward slash as
+            # directory separator, even on Windows, so don't use os.path.join
+            # here.  Reference for Python 3.10:
+            # https://github.com/python/cpython/blob/3.10/Lib/zipfile.py#L355.
+            # TODO: use zipfile.Path once 3.8 is our minimum supported version
+            entry_points_path = "{}.dist-info/entry_points.txt".format(name)
+
+            # If this file does not exist in the wheel, there are no entry points
+            if entry_points_path not in whl.namelist():
+                return dict()
+
+            # Parse the avaialble entry points
+            config = configparser.ConfigParser()
+            try:
+                config.read_string(whl.read(entry_points_path).decode("utf-8"))
+                if "console_scripts" in config.sections():
+                    return dict(config["console_scripts"])
+
+            # TODO: It's unclear what to do in a situation with duplicate sections or options.
+            # For now, we treat the config file as though it contains no scripts. For more
+            # details on the config parser, see:
+            # https://docs.python.org/3.7/library/configparser.html#configparser.ConfigParser
+            # https://docs.python.org/3.7/library/configparser.html#configparser.Error
+            except configparser.Error:
+                pass
+
+        return dict()
+
     def dependencies(self, extras_requested: Optional[Set[str]] = None) -> Set[str]:
         dependency_set = set()
 
@@ -75,7 +117,7 @@ class Wheel:
 
 
 def get_dist_info(wheel_dir: str) -> str:
-    """"Returns the relative path to the dist-info directory if it exists.
+    """ "Returns the relative path to the dist-info directory if it exists.
 
     Args:
          wheel_dir: The root of the extracted wheel directory.

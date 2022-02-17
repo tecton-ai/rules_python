@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+load("@bazel_gazelle//:def.bzl", "gazelle")
+
 package(default_visibility = ["//visibility:public"])
 
 licenses(["notice"])  # Apache 2.0
@@ -24,14 +26,20 @@ filegroup(
     name = "distribution",
     srcs = [
         "BUILD",
-        "LICENSE",
+        "WORKSPACE",
         "internal_deps.bzl",
         "internal_setup.bzl",
         "//python:distribution",
         "//python/pip_install:distribution",
+        "//third_party/github.com/bazelbuild/bazel-skylib/lib:distribution",
+        "//third_party/github.com/bazelbuild/bazel-skylib/rules:distribution",
+        "//third_party/github.com/bazelbuild/bazel-skylib/rules/private:distribution",
         "//tools:distribution",
     ],
-    visibility = ["//distro:__pkg__"],
+    visibility = [
+        "//examples:__pkg__",
+        "//tests:__pkg__",
+    ],
 )
 
 # Reexport of all bzl files used to allow downstream rules to generate docs
@@ -49,4 +57,20 @@ filegroup(
         "@bazel_tools//tools/python:utils.bzl",
     ],
     visibility = ["//visibility:public"],
+)
+
+# Gazelle configuration options.
+# See https://github.com/bazelbuild/bazel-gazelle#running-gazelle-with-bazel
+# gazelle:prefix github.com/bazelbuild/rules_python
+# gazelle:exclude bazel-out
+gazelle(name = "gazelle")
+
+gazelle(
+    name = "update_go_deps",
+    args = [
+        "-from_file=go.mod",
+        "-to_macro=gazelle/deps.bzl%gazelle_deps",
+        "-prune",
+    ],
+    command = "update-repos",
 )

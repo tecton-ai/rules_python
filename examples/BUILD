@@ -18,11 +18,6 @@ package(default_visibility = ["//visibility:public"])
 licenses(["notice"])  # Apache 2.0
 
 bazel_integration_test(
-    name = "legacy_pip_import_example",
-    timeout = "long",
-)
-
-bazel_integration_test(
     name = "pip_install_example",
     timeout = "long",
 )
@@ -33,6 +28,16 @@ bazel_integration_test(
 )
 
 bazel_integration_test(
+    name = "pip_repository_annotations_example",
+    timeout = "long",
+)
+
+bazel_integration_test(
     name = "py_import_example",
+    timeout = "long",
+)
+
+bazel_integration_test(
+    name = "relative_requirements_example",
     timeout = "long",
 )

@@ -12,16 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-###############################################################################
-# To regenerate documentation, run the top-level update_docs.sh script.       #
-###############################################################################
-
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+load("@bazel_skylib//rules:diff_test.bzl", "diff_test")
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@io_bazel_stardoc//stardoc:stardoc.bzl", "stardoc")
 
 package(default_visibility = ["//visibility:public"])
 
 licenses(["notice"])  # Apache 2.0
+
+_DOCS = {
+    "packaging": "//docs:packaging-docs",
+    "pip": "//docs:pip-docs",
+    "python": "//docs:core-docs",
+}
 
 # We define these bzl_library targets here rather than in the //python package
 # because they're only used for doc generation. This way, we avoid requiring
@@ -49,7 +53,7 @@ bzl_library(
     name = "defs",
     srcs = [
         "//python:defs.bzl",
-        "//python:private/reexports.bzl",
+        "//python/private:reexports.bzl",
     ],
     deps = [":bazel_python_tools"],
 )
@@ -57,40 +61,84 @@ bzl_library(
 bzl_library(
     name = "pip_install_bzl",
     srcs = [
-        "//python/pip_install:pip_repository.bzl",
-        "//python/pip_install:repositories.bzl",
+        "//python/pip_install:bzl",
+    ],
+    deps = [
+        ":defs",
     ],
 )
+
+bzl_library(
+    name = "packaging_bzl",
+    srcs = [
+        "//python:packaging.bzl",
+        "//python/private:stamp.bzl",
+    ],
+)
+
+# TODO: Stardoc does not guarantee consistent outputs accross platforms (Unix/Windows).
+# As a result we do not build or test docs on Windows.
+_NOT_WINDOWS = select({
+    "@platforms//os:linux": [],
+    "@platforms//os:macos": [],
+    "//conditions:default": ["@platforms//:incompatible"],
+})
 
 stardoc(
     name = "core-docs",
-    out = "python.md",
+    out = "python.md_",
     input = "//python:defs.bzl",
+    target_compatible_with = _NOT_WINDOWS,
     deps = [":defs"],
 )
 
-# TODO: Consider merging documentation pages for whl and pip. This would
-# require re-exporting their symbols from a common .bzl; see
-# https://github.com/bazelbuild/skydoc/issues/208.
-
 stardoc(
     name = "pip-docs",
-    out = "pip.md",
+    out = "pip.md_",
     input = "//python:pip.bzl",
+    target_compatible_with = _NOT_WINDOWS,
     deps = [
         ":bazel_repo_tools",
         ":pip_install_bzl",
+        "//third_party/github.com/bazelbuild/bazel-skylib/lib:versions",
     ],
-)
-
-stardoc(
-    name = "whl-docs",
-    out = "whl.md",
-    input = "//python:whl.bzl",
 )
 
 stardoc(
     name = "packaging-docs",
-    out = "packaging.md",
+    out = "packaging.md_",
     input = "//python:packaging.bzl",
+    target_compatible_with = _NOT_WINDOWS,
+    deps = [":packaging_bzl"],
+)
+
+[
+    diff_test(
+        name = "check_" + k,
+        failure_message = "Please run:   bazel run //docs:update",
+        file1 = k + ".md",
+        file2 = k + ".md_",
+        target_compatible_with = _NOT_WINDOWS,
+    )
+    for k in _DOCS.keys()
+]
+
+write_file(
+    name = "gen_update",
+    out = "update.sh",
+    content = [
+        "#!/usr/bin/env bash",
+        "cd $BUILD_WORKSPACE_DIRECTORY",
+    ] + [
+        "cp -fv bazel-bin/docs/{0}.md_ docs/{0}.md".format(k)
+        for k in _DOCS.keys()
+    ],
+    target_compatible_with = _NOT_WINDOWS,
+)
+
+sh_binary(
+    name = "update",
+    srcs = ["update.sh"],
+    data = _DOCS.values(),
+    target_compatible_with = _NOT_WINDOWS,
 )

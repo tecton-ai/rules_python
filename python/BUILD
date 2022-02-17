@@ -24,8 +24,6 @@ In an ideal renaming, we'd move the packaging rules to a different package so
 that @rules_python//python is only concerned with the core rules.
 """
 
-load("//python/pip_install:requirements.bzl", "compile_pip_requirements")
-
 package(default_visibility = ["//visibility:public"])
 
 licenses(["notice"])  # Apache 2.0
@@ -34,8 +32,8 @@ filegroup(
     name = "distribution",
     srcs = glob(["**"]) + [
         "//python/constraints:distribution",
-        "//python/legacy_pip_import:distribution",
         "//python/runfiles:distribution",
+        "//python/private:distribution",
     ],
     visibility = ["//:__pkg__"],
 )
@@ -48,10 +46,10 @@ filegroup(
         "defs.bzl",
         "packaging.bzl",
         "pip.bzl",
-        "private/reexports.bzl",
-        "whl.bzl",
+        "//python/pip_install:bzl",
+        "//python/private:bzl",
     ],
-    visibility = ["//:__pkg__"],
+    visibility = ["//visibility:public"],
 )
 
 # ========= Core rules =========
@@ -60,14 +58,6 @@ exports_files([
     "defs.bzl",
     "python.bzl",  # Deprecated, please use defs.bzl
 ])
-
-# Needed to define bzl_library targets for docgen. (We don't define the
-# bzl_library target here because it'd give our users a transitive dependency
-# on Skylib.)
-exports_files(
-    ["private/reexports.bzl"],
-    visibility = ["//docs:__pkg__"],
-)
 
 # This target can be used to inspect the current Python major version. To use,
 # put it in the `flag_values` attribute of a `config_setting` and test it
@@ -145,10 +135,4 @@ alias(
 exports_files([
     "packaging.bzl",
     "pip.bzl",
-    "whl.bzl",
 ])
-
-compile_pip_requirements(
-    name = "requirements",
-    extra_args = ["--allow-unsafe"],
-)
