@@ -512,9 +512,9 @@ whl_library_attrs = {
         mandatory = True,
         doc = "Python requirement string describing the package to make available",
     ),
-		"pip_platform_definitions": attr.string(
-			doc = "A map of select keys to platform definitions in the form '<platform>-<python_version>-<implementation>-<abi>'"
-		)
+    "pip_platform_definition": attr.string(
+      doc = "A pip platform definition in the form <platform>-<python_version>-<implementation>-<abi>",
+    )
 }
 
 whl_library_attrs.update(**common_attrs)
