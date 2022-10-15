@@ -69,6 +69,7 @@ class WheelMaker(object):
         self._zipfile = None
         # Entries for the RECORD file as (filename, hash, size) tuples.
         self._record = []
+        self._hashes = {}
 
     def __enter__(self):
         self._zipfile = zipfile.ZipFile(
@@ -140,7 +141,6 @@ class WheelMaker(object):
 
         arcname = arcname_from(package_filename)
 
-        self._zipfile.write(real_filename, arcname=arcname)
         # Find the hash and length
         hash = hashlib.sha256()
         size = 0
@@ -151,6 +151,17 @@ class WheelMaker(object):
                     break
                 hash.update(block)
                 size += len(block)
+
+        if arcname in self._hashes:
+            if hash.digest() != self._hashes[arcname]:
+                print("Tried to add %s to wheel with conflicting content" % arcname, file=sys.stderr)
+                sys.exit(1)
+            else:
+                return
+        else:
+            self._hashes[arcname] = hash.digest()
+
+        self._zipfile.write(real_filename, arcname=arcname)
         self._add_to_record(arcname, self._serialize_digest(hash), size)
 
     def add_wheelfile(self):
