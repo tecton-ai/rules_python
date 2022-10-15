@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 from tempfile import NamedTemporaryFile
+from typing import List, Optional
 
 from python.pip_install.extract_wheels import arguments, bazel, requirements
 from python.pip_install.extract_wheels.annotation import annotation_from_str_path
@@ -34,6 +35,17 @@ def configure_reproducible_wheels() -> None:
     if "PYTHONHASHSEED" not in os.environ:
         os.environ["PYTHONHASHSEED"] = "0"
 
+def _get_download_args(pip_platform_definition: str) -> List[str]:
+    platform, python_version, implementation, abi = pip_platform_definition.split("-")
+    return [
+        "download",
+        "--only-binary", ":all:",
+        "--platform", platform,
+        "--python-version", python_version,
+        "--implementation", implementation,
+        "--abi", abi
+    ]
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Build and/or fetch a single wheel based on the requirement passed in"
@@ -49,6 +61,10 @@ def main() -> None:
         type=annotation_from_str_path,
         help="A json encoded file containing annotations for rendered packages.",
     )
+    parser.add_argument(
+        "--pip_platform_definition",
+        help="A pip platform definition in the form <platform>-<python_version>-<implementation>-<abi>",
+    )
     arguments.parse_common_args(parser)
     args = parser.parse_args()
     deserialized_args = dict(vars(args))
@@ -56,10 +72,17 @@ def main() -> None:
 
     configure_reproducible_wheels()
 
+    if args.pip_platform_definition:
+        wheel_args = _get_download_args(args.pip_platform_definition)
+    elif args.download_only:
+        wheel_args = ["download"]
+    else:
+        wheel_args = ["wheel"]
+
     pip_args = (
         [sys.executable, "-m", "pip"]
         + (["--isolated"] if args.isolated else [])
-        + ["download" if args.download_only else "wheel", "--no-deps"]
+        + wheel_args
         + deserialized_args["extra_pip_args"]
     )
 

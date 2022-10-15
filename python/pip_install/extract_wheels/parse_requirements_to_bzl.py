@@ -4,7 +4,7 @@ import shlex
 import sys
 import textwrap
 from pathlib import Path
-from typing import Any, Dict, List, TextIO, Tuple
+from typing import Any, Dict, List, Optional, TextIO, Tuple
 
 from pip._internal.network.session import PipSession
 from pip._internal.req import constructors
@@ -63,16 +63,31 @@ The following requirements were not pinned:
     return install_req_and_lines
 
 
+class NamesAndRequirements:
+    def __init__(self, whls: List[Tuple[str, str, Optional[str]]], aliases: List[Tuple[str, Dict[str, str]]]):
+        self.whls = whls
+        self.aliases = aliases
+
+
 def repo_names_and_requirements(
-    install_reqs: List[Tuple[InstallRequirement, str]], repo_prefix: str
-) -> List[Tuple[str, str]]:
-    return [
-        (
-            bazel.sanitise_name(ir.name, prefix=repo_prefix),
-            line,
-        )
-        for ir, line in install_reqs
-    ]
+        install_reqs: List[Tuple[InstallRequirement, str]],
+        repo_prefix: str,
+        platforms: Dict[str, str]) -> NamesAndRequirements:
+    whls = []
+    aliases = []
+    for ir, line in install_reqs:
+        generic_name = bazel.sanitise_name(ir.name, prefix=repo_prefix)
+        if not platforms:
+            whls.append((generic_name, line, None))
+        else:
+            select_items = {}
+            for key, platform in platforms.items():
+                prefix = bazel.sanitise_name(platform, prefix=repo_prefix) + "__"
+                name = bazel.sanitise_name(ir.name, prefix=prefix)
+                whls.append((name, line, platform))
+                select_items[key] = "@{name}//:pkg".format(name=name)
+            aliases.append((generic_name, select_items))
+    return NamesAndRequirements(whls, aliases)
 
 
 def parse_whl_library_args(args: argparse.Namespace) -> Dict[str, Any]:
@@ -93,6 +108,7 @@ def generate_parsed_requirements_contents(
     repo_prefix: str,
     whl_library_args: Dict[str, Any],
     annotations: Dict[str, str] = dict(),
+    pip_platform_definitions: Dict[str, str] = dict(),
 ) -> str:
     """
     Parse each requirement from the requirements_lock file, and prepare arguments for each
@@ -105,7 +121,7 @@ def generate_parsed_requirements_contents(
         requirements_lock, whl_library_args["extra_pip_args"]
     )
     repo_names_and_reqs = repo_names_and_requirements(
-        install_req_and_lines, repo_prefix
+        install_req_and_lines, repo_prefix, pip_platform_definitions
     )
     all_requirements = ", ".join(
         [
@@ -128,7 +144,7 @@ def generate_parsed_requirements_contents(
 
         all_whl_requirements = [{all_whl_requirements}]
 
-        _packages = {repo_names_and_reqs}
+        _packages = {whl_definitions}
         _config = {args}
         _annotations = {annotations}
 
@@ -161,11 +177,12 @@ def generate_parsed_requirements_contents(
         def install_deps(**whl_library_kwargs):
             whl_config = dict(_config)
             whl_config.update(whl_library_kwargs)
-            for name, requirement in _packages:
+            for name, requirement, platform in _packages:
                 whl_library(
                     name = name,
                     requirement = requirement,
                     annotation = _get_annotation(requirement),
+                    pip_platform_definition = platform,
                     **whl_config
                 )
         """.format(
@@ -177,7 +194,7 @@ def generate_parsed_requirements_contents(
             dist_info_label=bazel.DIST_INFO_LABEL,
             entry_point_prefix=bazel.WHEEL_ENTRY_POINT_PREFIX,
             py_library_label=bazel.PY_LIBRARY_LABEL,
-            repo_names_and_reqs=repo_names_and_reqs,
+            whl_definitions=repo_names_and_reqs.whls,
             repo_prefix=repo_prefix,
             wheel_file_label=bazel.WHEEL_FILE_LABEL,
         )
@@ -236,6 +253,11 @@ If set, it will take precedence over python_interpreter.",
         type=annotation.annotations_map_from_str_path,
         help="A json encoded file containing annotations for rendered packages.",
     )
+    parser.add_argument(
+        "--pip_platform_definitions",
+        help="A map of select keys to platform definitions in the form "
+             + "<platform>-<python_version>-<implementation>-<abi>",
+    )
     arguments.parse_common_args(parser)
     args = parser.parse_args()
 
@@ -247,6 +269,7 @@ If set, it will take precedence over python_interpreter.",
     )
     req_names = sorted([req.name for req, _ in install_requirements])
     annotations = args.annotations.collect(req_names) if args.annotations else {}
+    pip_platform_definitions = args.pop("pip_platform_definitions")
 
     # Write all rendered annotation files and generate a list of the labels to write to the requirements file
     annotated_requirements = dict()
@@ -280,6 +303,7 @@ If set, it will take precedence over python_interpreter.",
             repo_prefix=args.repo_prefix,
             whl_library_args=whl_library_args,
             annotations=annotated_requirements,
+            pip_platform_definitions=pip_platform_definitions,
         )
     )
 

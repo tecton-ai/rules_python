@@ -255,6 +255,10 @@ def _pip_repository_impl(rctx):
     args += ["--python_interpreter", _get_python_interpreter_attr(rctx)]
     if rctx.attr.python_interpreter_target:
         args += ["--python_interpreter_target", str(rctx.attr.python_interpreter_target)]
+
+
+    if rctx.attr.pip_platform_definitions:
+        args.extend(["--pip_platform_definitions", struct(arg = {str(k): v for k, v in rctx.attr.pip_platform_definitions.items()}).to_json()])
     progress_message = "Parsing requirements to starlark"
 
     args += ["--repo", rctx.attr.name, "--repo-prefix", rctx.attr.repo_prefix]
@@ -389,6 +393,11 @@ wheels are fetched/built only for the targets specified by 'build/run/test'.
         allow_single_file = True,
         doc = "Override the requirements_lock attribute when the host platform is Windows",
     ),
+		"pip_platform_definitions": attr.label_keyed_string_dict(
+			doc = """
+A map of select keys to platform definitions in the form "<platform>-<python_version>-<implementation>-<abi>"
+"""
+    )
 }
 
 pip_repository_attrs.update(**common_attrs)
@@ -460,6 +469,13 @@ def _whl_library_impl(rctx):
 
     args = _parse_optional_attrs(rctx, args)
 
+
+    if rctx.attr.pip_platform_definition:
+        args.extend([
+        		"--pip_platform_definition",
+        		rctx.attr.pip_platform_definition,
+        ])
+
     result = rctx.execute(
         args,
         # Manually construct the PYTHONPATH since we cannot use the toolchain here
@@ -489,6 +505,9 @@ whl_library_attrs = {
         mandatory = True,
         doc = "Python requirement string describing the package to make available",
     ),
+		"pip_platform_definitions": attr.string(
+			doc = "A map of select keys to platform definitions in the form '<platform>-<python_version>-<implementation>-<abi>'"
+		)
 }
 
 whl_library_attrs.update(**common_attrs)
@@ -535,3 +554,29 @@ def package_annotation(
         data_exclude_glob = data_exclude_glob,
         srcs_exclude_glob = srcs_exclude_glob,
     ))
+
+
+_PLATFORM_ALIAS_TMPL = """
+alias(
+    name = "pkg",
+    actual = select({select_items}),
+    visibility = ["//visibility:public"],
+)
+"""
+
+def _impl_platform_alias(rctx):
+    rctx.file(
+        "BUILD",
+        content = _PLATFORM_ALIAS_TMPL.format(
+            select_items = rctx.attr.select_items
+        ),
+        executable = False,
+    )
+
+platform_alias = repository_rule(
+    attrs = {
+        "select_items": attr.string_dict()
+    },
+    implementation = _impl_platform_alias,
+    doc = """An internal rule used to create an alias for a pip package for the appropriate platform."""
+)
