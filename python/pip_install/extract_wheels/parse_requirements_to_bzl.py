@@ -269,7 +269,7 @@ If set, it will take precedence over python_interpreter.",
     )
     req_names = sorted([req.name for req, _ in install_requirements])
     annotations = args.annotations.collect(req_names) if args.annotations else {}
-    pip_platform_definitions = args.pop("pip_platform_definitions")
+    pip_platform_definitions = whl_library_args.pop("pip_platform_definitions")
 
     # Write all rendered annotation files and generate a list of the labels to write to the requirements file
     annotated_requirements = dict()
