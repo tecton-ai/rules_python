@@ -38,13 +38,13 @@ def _parse_optional_attrs(rctx, args):
     if extra_args:
         args += [
             "--extra_pip_args",
-            struct(args = extra_args).to_json(),
+            json.encode(struct(args = extra_args)),
         ]
 
     if rctx.attr.pip_data_exclude:
         args += [
             "--pip_data_exclude",
-            struct(exclude = rctx.attr.pip_data_exclude).to_json(),
+            json.encode(struct(exclude = rctx.attr.pip_data_exclude)),
         ]
 
     if rctx.attr.enable_implicit_namespace_pkgs:
@@ -93,7 +93,7 @@ def _pip_repository_impl(rctx):
         if rctx.attr.pip_platform_definitions:
             args.extend([
                 "--pip_platform_definitions",
-                struct(args = {str(k): v for k, v in rctx.attr.pip_platform_definitions.items()}).to_json(),
+                json.encode(struct(args = {str(k): v for k, v in rctx.attr.pip_platform_definitions.items()})),
             ])
     else:
         args = [
