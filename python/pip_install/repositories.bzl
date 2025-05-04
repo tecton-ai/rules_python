@@ -21,8 +21,8 @@ _RULE_DEPS = [
     ),
     (
         "pypi__pkginfo",
-        "https://files.pythonhosted.org/packages/56/09/054aea9b7534a15ad38a363a2bd974c20646ab1582a387a95b8df1bfea1c/pkginfo-1.10.0-py3-none-any.whl",
-        "889a6da2ed7ffc58ab5b900d888ddce90bce912f2d2de1dc1c26f4cb9fe65097",
+        "https://files.pythonhosted.org/packages/fa/3d/f4f2ba829efb54b6cd2d91349c7463316a9cc55a43fc980447416c88540f/pkginfo-1.12.1.2-py3-none-any.whl",
+        "c783ac885519cab2c34927ccfa6bf64b5a704d7c69afaea583dd9b7afe969343",
     ),
     (
         "pypi__setuptools",
