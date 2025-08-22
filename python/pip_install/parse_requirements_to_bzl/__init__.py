@@ -102,12 +102,17 @@ def generate_parsed_requirements_contents(all_args: argparse.Namespace) -> str:
     all_whl_requirements = ", ".join(
         [bazel.sanitised_repo_file_label(ir.name, repo_prefix=repo_prefix) for ir, _ in install_req_and_lines]
     )
+    all_pkg_names = ", ".join(
+        "'%s'" % ir.name for ir, _ in install_req_and_lines
+    )
     return textwrap.dedent("""\
         load("@rules_python//python/pip_install:pip_repository.bzl", "whl_library", "platform_alias")
 
         all_requirements = [{all_requirements}]
 
         all_whl_requirements = [{all_whl_requirements}]
+
+        all_pkg_names = [{all_pkg_names}]
 
         _packages = {whl_definitions}
         _aliases = {alias_definitions}
@@ -138,6 +143,7 @@ def generate_parsed_requirements_contents(all_args: argparse.Namespace) -> str:
         """.format(
             all_requirements=all_requirements,
             all_whl_requirements=all_whl_requirements,
+            all_pkg_names=all_pkg_names,
             whl_definitions=repo_names_and_reqs.whls,
             alias_definitions=repo_names_and_reqs.aliases,
             args=args,
